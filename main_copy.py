@@ -1,8 +1,8 @@
 import os
 import time
 import uuid
-from collections import Counter
 from datetime import datetime
+from html import escape
 
 import openpyxl
 import streamlit as st
@@ -28,426 +28,786 @@ GEMINI_MODEL = "gemini-3.8-flash"
 
 
 # ============================================================
-# CUSTOM STYLING
+# HELPERS FOR HTML
 # ============================================================
 
-st.markdown(
+def render_html(content):
     """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+    Render actual HTML with Streamlit's dedicated HTML renderer.
+    This prevents HTML from appearing as literal text.
+    """
+    st.html(content)
 
-    :root {
-        --bg: #06101c;
-        --bg2: #09172a;
-        --card: rgba(13, 28, 49, 0.76);
-        --card2: rgba(17, 36, 61, 0.62);
-        --line: rgba(255,255,255,.09);
-        --text: #eff7ff;
-        --muted: #91a6c1;
-        --cyan: #5de4ff;
-        --violet: #9f7cff;
-        --green: #56edb1;
-        --red: #ff7298;
-        --gold: #ffd56a;
-    }
 
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
+def safe(value):
+    """Safely insert dynamic values into HTML."""
+    return escape(str(value or ""))
 
-    .stApp {
-        background:
-            radial-gradient(circle at 7% 8%, rgba(93,228,255,.13), transparent 26%),
-            radial-gradient(circle at 93% 10%, rgba(159,124,255,.15), transparent 28%),
-            radial-gradient(circle at 55% 100%, rgba(86,237,177,.07), transparent 32%),
-            linear-gradient(135deg, var(--bg), var(--bg2));
-        color: var(--text);
-    }
 
-    /* ========================================================
-       FIX: KEEP APP CONTENT BELOW STREAMLIT TOP HEADER
-       ======================================================== */
+# ============================================================
+# CUSTOM CSS
+# ============================================================
 
-    [data-testid="stHeader"] {
-        background: rgba(6, 16, 28, 0.92) !important;
-        border-bottom: 1px solid rgba(255,255,255,.06);
-        backdrop-filter: blur(12px);
-        z-index: 1000;
-    }
+CSS = r"""
+<style>
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+    --bg: #06101c;
+    --bg2: #09172a;
+    --card: rgba(13, 28, 49, 0.76);
+    --card2: rgba(17, 36, 61, 0.62);
+    --line: rgba(255,255,255,.09);
+    --text: #eff7ff;
+    --muted: #91a6c1;
+    --cyan: #5de4ff;
+    --violet: #9f7cff;
+    --green: #56edb1;
+    --red: #ff7298;
+}
+
+html,
+body,
+[class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+.stApp {
+    background:
+        radial-gradient(
+            circle at 7% 8%,
+            rgba(93,228,255,.13),
+            transparent 26%
+        ),
+        radial-gradient(
+            circle at 93% 10%,
+            rgba(159,124,255,.15),
+            transparent 28%
+        ),
+        radial-gradient(
+            circle at 55% 100%,
+            rgba(86,237,177,.07),
+            transparent 32%
+        ),
+        linear-gradient(
+            135deg,
+            var(--bg),
+            var(--bg2)
+        );
+    color: var(--text);
+}
+
+
+/* =========================================================
+   IMPORTANT FIX:
+   Keep the application below Streamlit's top header.
+   ========================================================= */
+
+[data-testid="stHeader"] {
+    background: rgba(6, 16, 28, 0.96) !important;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    backdrop-filter: blur(14px);
+    z-index: 999999 !important;
+}
+
+[data-testid="stAppViewContainer"] {
+    background: transparent;
+}
+
+.main .block-container,
+[data-testid="stAppViewContainer"] .main .block-container,
+section.main > div.block-container {
+    max-width: 1450px !important;
+    padding-top: 5.8rem !important;
+    padding-bottom: 2.5rem !important;
+}
+
+
+/* =========================================================
+   SIDEBAR
+   ========================================================= */
+
+[data-testid="stSidebar"] {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(5,14,25,.98),
+            rgba(8,21,37,.96)
+        );
+    border-right: 1px solid var(--line);
+}
+
+[data-testid="stSidebar"] * {
+    color: var(--text);
+}
+
+
+/* =========================================================
+   BRAND
+   ========================================================= */
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 0 20px;
+}
+
+.brand-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 15px;
+
+    display: grid;
+    place-items: center;
+
+    font-size: 25px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(93,228,255,.18),
+            rgba(159,124,255,.28)
+        );
+
+    border: 1px solid rgba(255,255,255,.12);
+
+    box-shadow:
+        0 12px 30px rgba(93,228,255,.12);
+}
+
+.brand-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.32rem;
+    font-weight: 800;
+    letter-spacing: .5px;
+}
+
+.brand-sub {
+    color: var(--muted);
+    font-size: .72rem;
+}
+
+
+/* =========================================================
+   HERO
+   ========================================================= */
+
+.hero {
+    position: relative;
+    overflow: hidden;
+
+    padding: 28px 30px;
+
+    border-radius: 28px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(93,228,255,.09),
+            rgba(159,124,255,.13)
+        ),
+        rgba(9,22,39,.77);
+
+    border: 1px solid var(--line);
+
+    box-shadow:
+        0 28px 80px rgba(0,0,0,.34);
+
+    backdrop-filter: blur(18px);
+
+    margin-bottom: 20px;
+}
+
+.hero::after {
+    content: "";
+
+    position: absolute;
+
+    width: 240px;
+    height: 240px;
+
+    right: -70px;
+    top: -85px;
+
+    border-radius: 50%;
+
+    background:
+        radial-gradient(
+            circle,
+            rgba(93,228,255,.17),
+            transparent 70%
+        );
+
+    pointer-events: none;
+}
+
+.hero-kicker {
+    color: var(--cyan);
+
+    text-transform: uppercase;
+
+    letter-spacing: 2px;
+
+    font-size: .70rem;
+
+    font-weight: 800;
+}
+
+.hero-title {
+    font-family: 'Space Grotesk', sans-serif;
+
+    font-size: clamp(
+        2.1rem,
+        4vw,
+        3.25rem
+    );
+
+    font-weight: 700;
+
+    line-height: 1.02;
+
+    margin: 7px 0 9px;
+}
+
+.hero-copy {
+    color: var(--muted);
+
+    max-width: 760px;
+
+    line-height: 1.65;
+
+    font-size: .94rem;
+}
+
+.hero-row {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    gap: 18px;
+
+    flex-wrap: wrap;
+}
+
+.live-chip {
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    border-radius: 999px;
+
+    padding: 9px 13px;
+
+    color: var(--green);
+
+    background:
+        rgba(86,237,177,.07);
+
+    border:
+        1px solid rgba(86,237,177,.23);
+
+    font-size: .76rem;
+
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+
+    border-radius: 50%;
+
+    background: var(--green);
+
+    box-shadow:
+        0 0 15px rgba(86,237,177,.9);
+}
+
+
+/* =========================================================
+   GLASS
+   ========================================================= */
+
+.glass {
+    background: var(--card);
+
+    border:
+        1px solid var(--line);
+
+    border-radius: 21px;
+
+    padding: 19px;
+
+    box-shadow:
+        0 18px 55px rgba(0,0,0,.20);
+
+    backdrop-filter: blur(16px);
+}
+
+
+/* =========================================================
+   SECTIONS
+   ========================================================= */
+
+.section-title {
+    font-family: 'Space Grotesk', sans-serif;
+
+    font-size: 1.2rem;
+
+    font-weight: 700;
+
+    margin: 17px 0 11px;
+}
+
+
+/* =========================================================
+   FEATURE CARDS
+   ========================================================= */
+
+.feature-card {
+    min-height: 145px;
+
+    padding: 18px;
+
+    border-radius: 19px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(93,228,255,.065),
+            rgba(159,124,255,.075)
+        );
+
+    border:
+        1px solid var(--line);
+
+    transition:
+        transform .2s ease,
+        border-color .2s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-2px);
+
+    border-color:
+        rgba(93,228,255,.25);
+}
+
+.feature-icon {
+    font-size: 1.55rem;
+
+    margin-bottom: 7px;
+}
+
+.feature-title {
+    font-weight: 800;
+
+    font-size: .97rem;
+}
+
+.feature-copy {
+    color: var(--muted);
+
+    font-size: .77rem;
+
+    line-height: 1.55;
+
+    margin-top: 5px;
+}
+
+
+/* =========================================================
+   BALANCE
+   ========================================================= */
+
+.balance-card {
+    padding: 22px;
+
+    border-radius: 23px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(93,228,255,.12),
+            rgba(159,124,255,.14)
+        ),
+        rgba(12,27,48,.82);
+
+    border:
+        1px solid rgba(255,255,255,.11);
+
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.27);
+}
+
+.balance-label {
+    color: var(--muted);
+
+    font-size: .74rem;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1.4px;
+
+    font-weight: 800;
+}
+
+.balance-value {
+    font-family: 'Space Grotesk', sans-serif;
+
+    font-size: clamp(
+        2.25rem,
+        5vw,
+        3.4rem
+    );
+
+    line-height: 1;
+
+    font-weight: 700;
+
+    margin: 7px 0 12px;
+}
+
+.account-chip {
+    display: inline-block;
+
+    border-radius: 999px;
+
+    padding: 6px 10px;
+
+    font-size: .69rem;
+
+    border:
+        1px solid rgba(255,255,255,.10);
+
+    background:
+        rgba(255,255,255,.04);
+
+    color: #b8c7d9;
+}
+
+
+/* =========================================================
+   METRICS
+   ========================================================= */
+
+.metric-card {
+    padding: 18px;
+
+    border-radius: 20px;
+
+    background: var(--card2);
+
+    border:
+        1px solid var(--line);
+}
+
+.metric-label {
+    color: var(--muted);
+
+    font-size: .69rem;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1.2px;
+
+    font-weight: 800;
+}
+
+.metric-number {
+    font-family: 'Space Grotesk', sans-serif;
+
+    font-size: 1.78rem;
+
+    font-weight: 700;
+
+    margin-top: 5px;
+}
+
+.pill {
+    display: inline-block;
+
+    margin-top: 8px;
+
+    padding: 4px 8px;
+
+    border-radius: 999px;
+
+    font-size: .65rem;
+
+    font-weight: 800;
+}
+
+.pill-green {
+    color: var(--green);
+
+    background:
+        rgba(86,237,177,.07);
+
+    border:
+        1px solid rgba(86,237,177,.16);
+}
+
+.pill-cyan {
+    color: var(--cyan);
+
+    background:
+        rgba(93,228,255,.07);
+
+    border:
+        1px solid rgba(93,228,255,.16);
+}
+
+.pill-red {
+    color: var(--red);
+
+    background:
+        rgba(255,114,152,.07);
+
+    border:
+        1px solid rgba(255,114,152,.16);
+}
+
+
+/* =========================================================
+   TRANSACTIONS
+   ========================================================= */
+
+.transaction-card {
+    padding: 14px 16px;
+
+    margin-bottom: 9px;
+
+    border-radius: 16px;
+
+    background:
+        rgba(255,255,255,.028);
+
+    border:
+        1px solid var(--line);
+}
+
+.transaction-row {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    gap: 12px;
+}
+
+.transaction-name {
+    font-weight: 800;
+
+    font-size: .87rem;
+}
+
+.transaction-meta {
+    color: var(--muted);
+
+    font-size: .68rem;
+
+    margin-top: 4px;
+}
+
+.transaction-money {
+    font-family: 'Space Grotesk', sans-serif;
+
+    font-size: .93rem;
+
+    font-weight: 700;
+
+    white-space: nowrap;
+}
+
+.money-in {
+    color: var(--green);
+}
+
+.money-out {
+    color: var(--red);
+}
+
+
+/* =========================================================
+   AI
+   ========================================================= */
+
+.ai-card {
+    padding: 20px;
+
+    border-radius: 22px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(159,124,255,.11),
+            rgba(93,228,255,.08)
+        ),
+        rgba(14,26,47,.78);
+
+    border:
+        1px solid rgba(159,124,255,.18);
+
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.22);
+}
+
+.ai-badge {
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    border-radius: 999px;
+
+    padding: 6px 10px;
+
+    background:
+        rgba(159,124,255,.09);
+
+    color: #c7b9ff;
+
+    border:
+        1px solid rgba(159,124,255,.18);
+
+    font-size: .67rem;
+
+    font-weight: 800;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.footer {
+    color: #6e829b;
+
+    font-size: .70rem;
+
+    text-align: center;
+
+    padding: 28px 0 8px;
+}
+
+
+/* =========================================================
+   STREAMLIT BUTTONS
+   ========================================================= */
+
+div[data-testid="stButton"] > button,
+div[data-testid="stFormSubmitButton"] > button {
+    border-radius: 13px;
+
+    min-height: 44px;
+
+    border:
+        1px solid rgba(255,255,255,.10);
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(93,228,255,.11),
+            rgba(159,124,255,.12)
+        );
+
+    color: #f3f8ff;
+
+    font-weight: 800;
+
+    transition: .18s ease;
+}
+
+div[data-testid="stButton"] > button:hover,
+div[data-testid="stFormSubmitButton"] > button:hover {
+    transform: translateY(-1px);
+
+    border-color:
+        rgba(93,228,255,.30);
+
+    box-shadow:
+        0 9px 25px rgba(93,228,255,.10);
+}
+
+
+/* =========================================================
+   INPUTS
+   ========================================================= */
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input {
+    background:
+        rgba(5,15,28,.72);
+
+    color: #ffffff;
+
+    border:
+        1px solid rgba(255,255,255,.10);
+
+    border-radius: 12px;
+}
+
+
+/* =========================================================
+   TABS
+   ========================================================= */
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 11px;
+
+    padding: 7px 13px;
+
+    background:
+        rgba(255,255,255,.025);
+
+    border:
+        1px solid var(--line);
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+    .main .block-container,
     [data-testid="stAppViewContainer"] .main .block-container,
     section.main > div.block-container {
-        max-width: 1450px;
-        padding-top: 5.5rem !important;
-        padding-bottom: 2rem;
-    }
-
-    .block-container {
-        max-width: 1450px;
-        padding-top: 5.5rem !important;
-        padding-bottom: 2rem;
-    }
-
-    [data-testid="stSidebar"] {
-        background:
-            linear-gradient(180deg, rgba(5,14,25,.98), rgba(8,21,37,.96));
-        border-right: 1px solid var(--line);
-    }
-
-    [data-testid="stSidebar"] * {
-        color: var(--text);
-    }
-
-    .brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 4px 0 20px;
-    }
-
-    .brand-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 15px;
-        display: grid;
-        place-items: center;
-        font-size: 25px;
-        background: linear-gradient(135deg, rgba(93,228,255,.18), rgba(159,124,255,.28));
-        border: 1px solid rgba(255,255,255,.12);
-        box-shadow: 0 12px 30px rgba(93,228,255,.12);
-    }
-
-    .brand-name {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.32rem;
-        font-weight: 800;
-        letter-spacing: .5px;
-    }
-
-    .brand-sub {
-        color: var(--muted);
-        font-size: .72rem;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-top: 5.2rem !important;
     }
 
     .hero {
-        position: relative;
-        overflow: hidden;
-        padding: 26px 30px;
-        border-radius: 28px;
-        background:
-            linear-gradient(135deg, rgba(93,228,255,.09), rgba(159,124,255,.13)),
-            rgba(9,22,39,.77);
-        border: 1px solid var(--line);
-        box-shadow: 0 28px 80px rgba(0,0,0,.34);
-        backdrop-filter: blur(18px);
-        margin-bottom: 20px;
-    }
-
-    .hero::after {
-        content: "";
-        position: absolute;
-        width: 240px;
-        height: 240px;
-        right: -70px;
-        top: -85px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(93,228,255,.17), transparent 70%);
-    }
-
-    .hero-kicker {
-        color: var(--cyan);
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        font-size: .70rem;
-        font-weight: 800;
+        padding: 22px 20px;
     }
 
     .hero-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: clamp(2.1rem, 4vw, 3.25rem);
-        font-weight: 700;
-        line-height: 1.02;
-        margin: 7px 0 9px;
-    }
-
-    .hero-copy {
-        color: var(--muted);
-        max-width: 760px;
-        line-height: 1.65;
-        font-size: .94rem;
-    }
-
-    .live-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        border-radius: 999px;
-        padding: 9px 13px;
-        color: var(--green);
-        background: rgba(86,237,177,.07);
-        border: 1px solid rgba(86,237,177,.23);
-        font-size: .76rem;
-        font-weight: 800;
-        white-space: nowrap;
-    }
-
-    .live-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--green);
-        box-shadow: 0 0 15px rgba(86,237,177,.9);
-    }
-
-    .glass {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 21px;
-        padding: 19px;
-        box-shadow: 0 18px 55px rgba(0,0,0,.20);
-        backdrop-filter: blur(16px);
-    }
-
-    .section-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 700;
-        margin: 17px 0 11px;
-    }
-
-    .feature-card {
-        min-height: 145px;
-        padding: 18px;
-        border-radius: 19px;
-        background: linear-gradient(145deg, rgba(93,228,255,.065), rgba(159,124,255,.075));
-        border: 1px solid var(--line);
-        transition: transform .2s ease, border-color .2s ease;
-    }
-
-    .feature-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(93,228,255,.25);
-    }
-
-    .feature-icon {
-        font-size: 1.55rem;
-        margin-bottom: 7px;
-    }
-
-    .feature-title {
-        font-weight: 800;
-        font-size: .97rem;
-    }
-
-    .feature-copy {
-        color: var(--muted);
-        font-size: .77rem;
-        line-height: 1.55;
-        margin-top: 5px;
-    }
-
-    .balance-card {
-        padding: 22px;
-        border-radius: 23px;
-        background:
-            linear-gradient(135deg, rgba(93,228,255,.12), rgba(159,124,255,.14)),
-            rgba(12,27,48,.82);
-        border: 1px solid rgba(255,255,255,.11);
-        box-shadow: 0 20px 60px rgba(0,0,0,.27);
-    }
-
-    .balance-label {
-        color: var(--muted);
-        font-size: .74rem;
-        text-transform: uppercase;
-        letter-spacing: 1.4px;
-        font-weight: 800;
-    }
-
-    .balance-value {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: clamp(2.25rem, 5vw, 3.4rem);
-        line-height: 1;
-        font-weight: 700;
-        margin: 7px 0 12px;
-    }
-
-    .account-chip {
-        display: inline-block;
-        border-radius: 999px;
-        padding: 6px 10px;
-        font-size: .69rem;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(255,255,255,.04);
-        color: #b8c7d9;
-    }
-
-    .metric-card {
-        padding: 18px;
-        border-radius: 20px;
-        background: var(--card2);
-        border: 1px solid var(--line);
-    }
-
-    .metric-label {
-        color: var(--muted);
-        font-size: .69rem;
-        text-transform: uppercase;
-        letter-spacing: 1.2px;
-        font-weight: 800;
-    }
-
-    .metric-number {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.78rem;
-        font-weight: 700;
-        margin-top: 5px;
-    }
-
-    .pill {
-        display: inline-block;
-        margin-top: 8px;
-        padding: 4px 8px;
-        border-radius: 999px;
-        font-size: .65rem;
-        font-weight: 800;
-    }
-
-    .pill-green {
-        color: var(--green);
-        background: rgba(86,237,177,.07);
-        border: 1px solid rgba(86,237,177,.16);
-    }
-
-    .pill-cyan {
-        color: var(--cyan);
-        background: rgba(93,228,255,.07);
-        border: 1px solid rgba(93,228,255,.16);
-    }
-
-    .pill-red {
-        color: var(--red);
-        background: rgba(255,114,152,.07);
-        border: 1px solid rgba(255,114,152,.16);
-    }
-
-    .transaction-card {
-        padding: 14px 16px;
-        margin-bottom: 9px;
-        border-radius: 16px;
-        background: rgba(255,255,255,.028);
-        border: 1px solid var(--line);
+        font-size: 2.15rem;
     }
 
     .transaction-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
+        align-items: flex-start;
     }
 
-    .transaction-name {
-        font-weight: 800;
-        font-size: .87rem;
-    }
+}
 
-    .transaction-meta {
-        color: var(--muted);
-        font-size: .68rem;
-        margin-top: 4px;
-    }
+</style>
+"""
 
-    .transaction-money {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: .93rem;
-        font-weight: 700;
-        white-space: nowrap;
-    }
-
-    .money-in {
-        color: var(--green);
-    }
-
-    .money-out {
-        color: var(--red);
-    }
-
-    .ai-card {
-        padding: 20px;
-        border-radius: 22px;
-        background:
-            linear-gradient(145deg, rgba(159,124,255,.11), rgba(93,228,255,.08)),
-            rgba(14,26,47,.78);
-        border: 1px solid rgba(159,124,255,.18);
-        box-shadow: 0 20px 60px rgba(0,0,0,.22);
-    }
-
-    .ai-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        border-radius: 999px;
-        padding: 6px 10px;
-        background: rgba(159,124,255,.09);
-        color: #c7b9ff;
-        border: 1px solid rgba(159,124,255,.18);
-        font-size: .67rem;
-        font-weight: 800;
-    }
-
-    .footer {
-        color: #6e829b;
-        font-size: .70rem;
-        text-align: center;
-        padding: 28px 0 8px;
-    }
-
-    div[data-testid="stButton"] > button,
-    div[data-testid="stFormSubmitButton"] > button {
-        border-radius: 13px;
-        min-height: 44px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: linear-gradient(135deg, rgba(93,228,255,.11), rgba(159,124,255,.12));
-        color: #f3f8ff;
-        font-weight: 800;
-        transition: .18s ease;
-    }
-
-    div[data-testid="stButton"] > button:hover,
-    div[data-testid="stFormSubmitButton"] > button:hover {
-        transform: translateY(-1px);
-        border-color: rgba(93,228,255,.30);
-        box-shadow: 0 9px 25px rgba(93,228,255,.10);
-    }
-
-    div[data-testid="stTextInput"] input,
-    div[data-testid="stNumberInput"] input {
-        background: rgba(5,15,28,.72);
-        color: #ffffff;
-        border: 1px solid rgba(255,255,255,.10);
-        border-radius: 12px;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 11px;
-        padding: 7px 13px;
-        background: rgba(255,255,255,.025);
-        border: 1px solid var(--line);
-    }
-
-    @media (max-width: 900px) {
-        .block-container,
-        [data-testid="stAppViewContainer"] .main .block-container,
-        section.main > div.block-container {
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            padding-top: 5rem !important;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+render_html(CSS)
 
 
 # ============================================================
@@ -462,11 +822,12 @@ try:
 except Exception:
     pass
 
-if not api_key:
-    gemini_ready = False
-else:
+if api_key:
     client = genai.Client(api_key=api_key)
     gemini_ready = True
+else:
+    client = None
+    gemini_ready = False
 
 
 # ============================================================
@@ -474,9 +835,10 @@ else:
 # ============================================================
 
 def create_excel_file():
-    """Create the Excel database if it does not already exist."""
     if not os.path.exists(FILE_NAME):
+
         wb = openpyxl.Workbook()
+
         sheet = wb.active
         sheet.title = "Bank Records"
 
@@ -495,9 +857,12 @@ def create_excel_file():
         sheet.append(headers)
 
         for cell in sheet[1]:
-            cell.font = openpyxl.styles.Font(bold=True)
+            cell.font = openpyxl.styles.Font(
+                bold=True
+            )
 
         sheet.freeze_panes = "A2"
+
         wb.save(FILE_NAME)
         wb.close()
 
@@ -506,7 +871,9 @@ create_excel_file()
 
 
 def now_text():
-    return datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    return datetime.now().strftime(
+        "%d-%m-%Y %H:%M:%S"
+    )
 
 
 def transaction_id():
@@ -514,76 +881,120 @@ def transaction_id():
 
 
 def account_exists(account_no):
+
     wb = openpyxl.load_workbook(
         FILE_NAME,
         read_only=True,
         data_only=True,
     )
+
     sheet = wb["Bank Records"]
 
-    for row in sheet.iter_rows(min_row=2, values_only=True):
-        if row[0] is not None and str(row[0]) == str(account_no):
+    for row in sheet.iter_rows(
+        min_row=2,
+        values_only=True,
+    ):
+
+        if (
+            row[0] is not None
+            and str(row[0]) == str(account_no)
+        ):
+
             wb.close()
             return True
 
     wb.close()
+
     return False
 
 
 def get_account(account_no):
+
     wb = openpyxl.load_workbook(
         FILE_NAME,
         read_only=True,
         data_only=True,
     )
+
     sheet = wb["Bank Records"]
 
-    for row in sheet.iter_rows(min_row=2, values_only=True):
+    for row in sheet.iter_rows(
+        min_row=2,
+        values_only=True,
+    ):
+
         if (
             row[0] is not None
             and str(row[0]) == str(account_no)
             and row[1] is not None
         ):
+
             result = {
                 "account_no": str(row[0]),
                 "name": str(row[1]),
-                "pin": "" if row[2] is None else str(row[2]),
+                "pin": (
+                    ""
+                    if row[2] is None
+                    else str(row[2])
+                ),
             }
 
             wb.close()
+
             return result
 
     wb.close()
+
     return None
 
 
 def authenticate(account_no, pin):
-    account = get_account(account_no)
 
-    if account and account["pin"] == str(pin):
+    account = get_account(
+        account_no
+    )
+
+    if (
+        account
+        and account["pin"] == str(pin)
+    ):
         return account
 
     return None
 
 
 def get_balance(account_no):
+
     wb = openpyxl.load_workbook(
         FILE_NAME,
         read_only=True,
         data_only=True,
     )
+
     sheet = wb["Bank Records"]
 
     balance = None
 
-    for row in sheet.iter_rows(min_row=2, values_only=True):
-        if row[0] is not None and str(row[0]) == str(account_no):
+    for row in sheet.iter_rows(
+        min_row=2,
+        values_only=True,
+    ):
+
+        if (
+            row[0] is not None
+            and str(row[0]) == str(account_no)
+        ):
+
             try:
                 balance = float(row[7])
-            except (TypeError, ValueError):
+            except (
+                TypeError,
+                ValueError,
+            ):
                 balance = 0.0
 
     wb.close()
+
     return balance
 
 
@@ -595,10 +1006,14 @@ def add_transaction(
     previous_balance,
     current_balance,
 ):
+
     tx_id = transaction_id()
     dt = now_text()
 
-    wb = openpyxl.load_workbook(FILE_NAME)
+    wb = openpyxl.load_workbook(
+        FILE_NAME
+    )
+
     sheet = wb["Bank Records"]
 
     sheet.append(
@@ -609,8 +1024,14 @@ def add_transaction(
             tx_id,
             tx_type,
             round(float(amount), 2),
-            round(float(previous_balance), 2),
-            round(float(current_balance), 2),
+            round(
+                float(previous_balance),
+                2,
+            ),
+            round(
+                float(current_balance),
+                2,
+            ),
             dt,
         ]
     )
@@ -622,40 +1043,74 @@ def add_transaction(
 
 
 def get_history(account_no):
+
     wb = openpyxl.load_workbook(
         FILE_NAME,
         read_only=True,
         data_only=True,
     )
+
     sheet = wb["Bank Records"]
 
     history = []
 
-    for row in sheet.iter_rows(min_row=2, values_only=True):
-        if row[0] is not None and str(row[0]) == str(account_no):
+    for row in sheet.iter_rows(
+        min_row=2,
+        values_only=True,
+    ):
+
+        if (
+            row[0] is not None
+            and str(row[0]) == str(account_no)
+        ):
+
             history.append(
                 {
-                    "Transaction ID": str(row[3] or ""),
-                    "Type": str(row[4] or ""),
-                    "Amount": float(row[5] or 0),
-                    "Previous Balance": float(row[6] or 0),
-                    "Current Balance": float(row[7] or 0),
-                    "Date-Time": row[8],
+                    "Transaction ID":
+                        str(row[3] or ""),
+
+                    "Type":
+                        str(row[4] or ""),
+
+                    "Amount":
+                        float(row[5] or 0),
+
+                    "Previous Balance":
+                        float(row[6] or 0),
+
+                    "Current Balance":
+                        float(row[7] or 0),
+
+                    "Date-Time":
+                        row[8],
                 }
             )
 
     wb.close()
+
     return history
 
 
 def initials(name):
-    cleaned = (name or "?").strip()
+
+    cleaned = (
+        name or "?"
+    ).strip()
+
     pieces = cleaned.split()
 
     if len(pieces) >= 2:
-        return (pieces[0][0] + pieces[-1][0]).upper()
 
-    return cleaned[:2].upper() if cleaned else "PY"
+        return (
+            pieces[0][0]
+            + pieces[-1][0]
+        ).upper()
+
+    return (
+        cleaned[:2].upper()
+        if cleaned
+        else "PY"
+    )
 
 
 # ============================================================
@@ -670,14 +1125,17 @@ session_defaults = {
     "ai_report": None,
     "chat_answer": None,
     "last_tx": None,
+    "money_mode": "Deposit",
 }
 
 for key, value in session_defaults.items():
+
     if key not in st.session_state:
         st.session_state[key] = value
 
 
 def logout():
+
     st.session_state.logged_in = False
     st.session_state.account_no = None
     st.session_state.name = None
@@ -693,18 +1151,33 @@ def logout():
 
 @st.fragment(run_every="1s")
 def live_clock():
+
     current = datetime.now()
 
-    st.markdown(
+    render_html(
         f"""
-        <div style="text-align:right;color:#8fa4bf;font-size:.72rem;">
-            <span style="color:#56edb1;font-weight:800;">● LIVE</span>
-            &nbsp; {current.strftime("%A, %d %B %Y")}
+        <div style="
+            text-align:right;
+            color:#8fa4bf;
+            font-size:.72rem;
+            margin-bottom:10px;
+        ">
+            <span style="
+                color:#56edb1;
+                font-weight:800;
+            ">
+                ● LIVE
+            </span>
+
+            &nbsp;
+
+            {safe(current.strftime("%A, %d %B %Y"))}
+
             &nbsp;•&nbsp;
-            {current.strftime("%H:%M:%S")}
+
+            {safe(current.strftime("%H:%M:%S"))}
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -713,30 +1186,53 @@ def live_clock():
 # ============================================================
 
 def build_ai_context(history, balance):
+
     lines = []
 
     for tx in history[-20:]:
+
         lines.append(
-            f"- {tx['Date-Time']} | {tx['Type']} | "
-            f"₹{tx['Amount']:.2f} | balance after "
+            f"- {tx['Date-Time']} | "
+            f"{tx['Type']} | "
+            f"₹{tx['Amount']:.2f} | "
+            f"balance after "
             f"₹{tx['Current Balance']:.2f}"
         )
 
-    recent_text = "\n".join(lines) if lines else "No transactions yet."
+    recent_text = (
+        "\n".join(lines)
+        if lines
+        else "No transactions yet."
+    )
 
     return (
-        f"Current balance: ₹{balance or 0:.2f}\n"
-        f"Recent transactions:\n{recent_text}"
+        f"Current balance: "
+        f"₹{balance or 0:.2f}\n"
+        f"Recent transactions:\n"
+        f"{recent_text}"
     )
 
 
 def generate_ai_report():
+
     if not gemini_ready:
         return None
 
-    balance = get_balance(st.session_state.account_no) or 0
-    history = get_history(st.session_state.account_no)
-    context = build_ai_context(history, balance)
+    balance = (
+        get_balance(
+            st.session_state.account_no
+        )
+        or 0
+    )
+
+    history = get_history(
+        st.session_state.account_no
+    )
+
+    context = build_ai_context(
+        history,
+        balance,
+    )
 
     prompt = f"""
 You are PY BANK AI, an educational banking dashboard assistant.
@@ -775,7 +1271,7 @@ State that the report is an AI-generated summary of the provided transaction
 data and is not professional financial advice.
 
 Rules:
-- Use only the supplied transaction data.
+- Use only supplied transaction data.
 - Do not invent merchants, dates, income sources, or expenses.
 - Do not claim real-time banking information.
 - Use INR formatting.
@@ -791,12 +1287,25 @@ Rules:
 
 
 def generate_ai_answer(question):
+
     if not gemini_ready:
         return None
 
-    balance = get_balance(st.session_state.account_no) or 0
-    history = get_history(st.session_state.account_no)
-    context = build_ai_context(history, balance)
+    balance = (
+        get_balance(
+            st.session_state.account_no
+        )
+        or 0
+    )
+
+    history = get_history(
+        st.session_state.account_no
+    )
+
+    context = build_ai_context(
+        history,
+        balance,
+    )
 
     prompt = f"""
 You are PY BANK AI, an educational assistant inside a personal banking
@@ -809,8 +1318,10 @@ User question:
 {question}
 
 Answer helpfully using only information that can be supported by the
-account context above. You may explain transaction history, balances,
-totals, and basic budgeting concepts in general terms.
+account context above.
+
+You may explain transaction history, balances, totals, and basic budgeting
+concepts in general terms.
 
 Do not:
 - invent transactions,
@@ -834,19 +1345,28 @@ Keep the answer concise and use Markdown.
 # TOP BRAND
 # ============================================================
 
-st.markdown(
+render_html(
     """
     <div class="brand">
-        <div class="brand-icon">🏦</div>
+
+        <div class="brand-icon">
+            🏦
+        </div>
+
         <div>
-            <div class="brand-name">PY BANK</div>
+
+            <div class="brand-name">
+                PY BANK
+            </div>
+
             <div class="brand-sub">
                 AI-powered personal banking prototype
             </div>
+
         </div>
+
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 live_clock()
@@ -858,12 +1378,14 @@ live_clock()
 
 if not st.session_state.logged_in:
 
-    st.markdown(
+    render_html(
         """
         <div class="hero">
-            <div style="display:flex;justify-content:space-between;
-                        align-items:flex-start;gap:20px;flex-wrap:wrap;">
+
+            <div class="hero-row">
+
                 <div>
+
                     <div class="hero-kicker">
                         Smart banking • Gemini assisted
                     </div>
@@ -873,41 +1395,54 @@ if not st.session_state.logged_in:
                     </div>
 
                     <div class="hero-copy">
-                        A decorative Streamlit banking experience inspired by
-                        your Gemini travel application — with your original
-                        Excel-backed account system, live UI, transaction
-                        analytics and an optional Gemini-powered money
-                        assistant.
+                        A polished Streamlit banking experience with your
+                        original Excel-backed account system, live interface,
+                        transaction analytics and optional Gemini assistance.
                     </div>
+
                 </div>
 
                 <div class="live-chip">
+
                     <span class="live-dot"></span>
+
                     Python • Streamlit • Gemini
+
                 </div>
+
             </div>
+
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    left, right = st.columns([1.15, .85], gap="large")
+    left, right = st.columns(
+        [1.15, .85],
+        gap="large",
+    )
 
     with left:
 
         login_tab, create_tab = st.tabs(
-            ["🔐 Login", "✨ Create Account"]
+            [
+                "🔐 Login",
+                "✨ Create Account",
+            ]
         )
 
         with login_tab:
 
-            st.markdown("### Welcome back 👋")
+            st.markdown(
+                "### Welcome back 👋"
+            )
 
             with st.form("login_form"):
 
                 account_no = st.text_input(
                     "Account Number",
-                    placeholder="Enter your account number",
+                    placeholder=(
+                        "Enter your account number"
+                    ),
                 )
 
                 pin = st.text_input(
@@ -928,11 +1463,17 @@ if not st.session_state.logged_in:
                 account_no = account_no.strip()
 
                 if not account_no or not pin:
+
                     st.error(
-                        "Please enter both account number and PIN."
+                        "Please enter both account "
+                        "number and PIN."
                     )
 
-                elif len(pin) != 4 or not pin.isdigit():
+                elif (
+                    len(pin) != 4
+                    or not pin.isdigit()
+                ):
+
                     st.error(
                         "PIN must contain exactly 4 digits."
                     )
@@ -947,10 +1488,15 @@ if not st.session_state.logged_in:
                     if account:
 
                         st.session_state.logged_in = True
+
                         st.session_state.account_no = (
                             account["account_no"]
                         )
-                        st.session_state.name = account["name"]
+
+                        st.session_state.name = (
+                            account["name"]
+                        )
+
                         st.session_state.page = "Home"
 
                         st.toast(
@@ -963,7 +1509,8 @@ if not st.session_state.logged_in:
                     else:
 
                         st.error(
-                            "Login failed. Check your credentials."
+                            "Login failed. "
+                            "Check your credentials."
                         )
 
         with create_tab:
@@ -1027,7 +1574,10 @@ if not st.session_state.logged_in:
                         "That account number already exists."
                     )
 
-                elif len(new_pin) != 4 or not new_pin.isdigit():
+                elif (
+                    len(new_pin) != 4
+                    or not new_pin.isdigit()
+                ):
 
                     st.error(
                         "PIN must contain exactly 4 digits."
@@ -1041,11 +1591,20 @@ if not st.session_state.logged_in:
 
                 else:
 
-                    amount = round(opening, 2)
+                    amount = round(
+                        opening,
+                        2,
+                    )
+
                     txid = transaction_id()
 
-                    wb = openpyxl.load_workbook(FILE_NAME)
-                    sheet = wb["Bank Records"]
+                    wb = openpyxl.load_workbook(
+                        FILE_NAME
+                    )
+
+                    sheet = wb[
+                        "Bank Records"
+                    ]
 
                     sheet.append(
                         [
@@ -1061,7 +1620,10 @@ if not st.session_state.logged_in:
                         ]
                     )
 
-                    wb.save(FILE_NAME)
+                    wb.save(
+                        FILE_NAME
+                    )
+
                     wb.close()
 
                     st.success(
@@ -1069,23 +1631,28 @@ if not st.session_state.logged_in:
                     )
 
                     st.info(
-                        f"Account Number: {new_account}"
+                        f"Account Number: "
+                        f"{new_account}"
                     )
 
                     st.info(
-                        f"Opening Balance: ₹{amount:,.2f}"
+                        f"Opening Balance: "
+                        f"₹{amount:,.2f}"
                     )
 
     with right:
 
-        st.markdown(
+        render_html(
             """
             <div class="section-title">
                 ✨ PY BANK features
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">💎</div>
+
+                <div class="feature-icon">
+                    💎
+                </div>
 
                 <div class="feature-title">
                     Premium dashboard
@@ -1095,27 +1662,35 @@ if not st.session_state.logged_in:
                     Decorative cards, live status indicators and a polished
                     fintech-style interface.
                 </div>
+
             </div>
 
             <br>
 
             <div class="feature-card">
-                <div class="feature-icon">🤖</div>
+
+                <div class="feature-icon">
+                    🤖
+                </div>
 
                 <div class="feature-title">
                     Gemini AI assistant
                 </div>
 
                 <div class="feature-copy">
-                    Generate an easy-to-read summary of the transaction data
+                    Generate easy-to-read summaries of the transaction data
                     stored in your prototype account.
                 </div>
+
             </div>
 
             <br>
 
             <div class="feature-card">
-                <div class="feature-icon">📊</div>
+
+                <div class="feature-icon">
+                    📊
+                </div>
 
                 <div class="feature-title">
                     Money insights
@@ -1125,12 +1700,16 @@ if not st.session_state.logged_in:
                     View money-in, money-out, transaction counts and a balance
                     timeline from your workbook.
                 </div>
+
             </div>
 
             <br>
 
             <div class="feature-card">
-                <div class="feature-icon">⚡</div>
+
+                <div class="feature-icon">
+                    ⚡
+                </div>
 
                 <div class="feature-title">
                     Fast actions
@@ -1140,16 +1719,16 @@ if not st.session_state.logged_in:
                     Deposit, withdraw, view history and download your activity
                     in a few clicks.
                 </div>
+
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
         if not gemini_ready:
 
             st.warning(
-                "🔑 Gemini is optional, but the AI features are disabled until "
-                "GEMINI_API_KEY is configured."
+                "🔑 Gemini is optional, but the AI features "
+                "are disabled until GEMINI_API_KEY is configured."
             )
 
         else:
@@ -1158,9 +1737,12 @@ if not st.session_state.logged_in:
                 "🤖 Gemini AI is connected."
             )
 
-    st.markdown(
-        '<div class="footer">PY BANK • Built with Python + Streamlit + Gemini</div>',
-        unsafe_allow_html=True,
+    render_html(
+        """
+        <div class="footer">
+            PY BANK • Built with Python + Streamlit + Gemini
+        </div>
+        """
     )
 
     st.stop()
@@ -1172,24 +1754,46 @@ if not st.session_state.logged_in:
 
 with st.sidebar:
 
-    st.markdown(
+    render_html(
         """
         <div class="brand">
-            <div class="brand-icon">🏦</div>
+
+            <div class="brand-icon">
+                🏦
+            </div>
+
             <div>
-                <div class="brand-name">PY BANK</div>
+
+                <div class="brand-name">
+                    PY BANK
+                </div>
+
                 <div class="brand-sub">
                     Personal banking console
                 </div>
+
             </div>
+
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    st.markdown(
+    sidebar_name = safe(
+        st.session_state.name
+    )
+
+    sidebar_account = safe(
+        st.session_state.account_no
+    )
+
+    sidebar_initials = safe(
+        initials(st.session_state.name)
+    )
+
+    render_html(
         f"""
         <div class="glass" style="text-align:center;">
+
             <div style="
                 width:64px;
                 height:64px;
@@ -1207,11 +1811,11 @@ with st.sidebar:
                     );
                 border:1px solid rgba(255,255,255,.11);
             ">
-                {initials(st.session_state.name)}
+                {sidebar_initials}
             </div>
 
             <div style="font-weight:800;">
-                {st.session_state.name}
+                {sidebar_name}
             </div>
 
             <div style="
@@ -1219,16 +1823,18 @@ with st.sidebar:
                 font-size:.72rem;
                 margin-top:4px;
             ">
-                Account {st.session_state.account_no}
+                Account {sidebar_account}
             </div>
+
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.divider()
 
-    st.subheader("🧭 Navigation")
+    st.subheader(
+        "🧭 Navigation"
+    )
 
     pages = {
         "🏠 Home": "Home",
@@ -1239,24 +1845,33 @@ with st.sidebar:
         "👤 Profile": "Profile",
     }
 
+    current_index = list(
+        pages.values()
+    ).index(
+        st.session_state.page
+    )
+
     selected = st.radio(
         "Choose",
         list(pages.keys()),
-        index=list(pages.values()).index(
-            st.session_state.page
-        ),
+        index=current_index,
         label_visibility="collapsed",
     )
 
-    st.session_state.page = pages[selected]
+    st.session_state.page = (
+        pages[selected]
+    )
 
     st.divider()
 
     side_balance = (
-        get_balance(st.session_state.account_no) or 0
+        get_balance(
+            st.session_state.account_no
+        )
+        or 0
     )
 
-    st.markdown(
+    render_html(
         f"""
         <div class="metric-label">
             Available Balance
@@ -1277,43 +1892,49 @@ with st.sidebar:
         ">
             ● Live account
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.divider()
 
     if gemini_ready:
-        st.caption("🤖 Gemini AI: Connected")
+        st.caption(
+            "🤖 Gemini AI: Connected"
+        )
     else:
-        st.caption("🤖 Gemini AI: Not configured")
+        st.caption(
+            "🤖 Gemini AI: Not configured"
+        )
 
     st.caption(
-        "Prototype database: bank_records_1.xlsx"
+        "Prototype database: "
+        "bank_records_1.xlsx"
     )
 
     if st.button(
         "🚪 Logout",
         use_container_width=True,
     ):
+
         logout()
+
         st.rerun()
 
 
 # ============================================================
-# HERO AFTER LOGIN
+# LOGGED-IN HERO
 # ============================================================
 
-st.markdown(
+name_html = safe(
+    st.session_state.name
+)
+
+render_html(
     f"""
     <div class="hero">
-        <div style="
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:18px;
-            flex-wrap:wrap;
-        ">
+
+        <div class="hero-row">
+
             <div>
 
                 <div class="hero-kicker">
@@ -1321,24 +1942,29 @@ st.markdown(
                 </div>
 
                 <div class="hero-title">
-                    Good to see you, {st.session_state.name}.
+                    Good to see you,
+                    {name_html}.
                 </div>
 
                 <div class="hero-copy">
-                    Monitor your account, move money, explore activity and ask
-                    PY BANK AI to explain your transaction data.
+                    Monitor your account, move money, explore activity
+                    and ask PY BANK AI to explain your transaction data.
                 </div>
 
             </div>
 
             <div class="live-chip">
+
                 <span class="live-dot"></span>
+
                 Live session
+
             </div>
+
         </div>
+
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 
@@ -1349,7 +1975,10 @@ st.markdown(
 if st.session_state.page == "Home":
 
     balance = (
-        get_balance(st.session_state.account_no) or 0
+        get_balance(
+            st.session_state.account_no
+        )
+        or 0
     )
 
     history = get_history(
@@ -1363,7 +1992,11 @@ if st.session_state.page == "Home":
 
     with left:
 
-        st.markdown(
+        account_html = safe(
+            st.session_state.account_no
+        )
+
+        render_html(
             f"""
             <div class="balance-card">
 
@@ -1376,7 +2009,7 @@ if st.session_state.page == "Home":
                 </div>
 
                 <span class="account-chip">
-                    A/C {st.session_state.account_no}
+                    A/C {account_html}
                 </span>
 
                 <span class="account-chip"
@@ -1385,13 +2018,12 @@ if st.session_state.page == "Home":
                 </span>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     with right:
 
-        st.markdown(
+        render_html(
             """
             <div class="ai-card">
 
@@ -1399,7 +2031,9 @@ if st.session_state.page == "Home":
                     🤖 GEMINI ENABLED
                 </div>
 
-                <h3 style="margin:10px 0 6px;">
+                <h3 style="
+                    margin:10px 0 6px;
+                ">
                     Your AI banking companion
                 </h3>
 
@@ -1408,13 +2042,12 @@ if st.session_state.page == "Home":
                     font-size:.78rem;
                     line-height:1.55;
                 ">
-                    Turn your transaction history into a clear AI-generated
-                    activity summary.
+                    Turn your transaction history into a clear
+                    AI-generated activity summary.
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     st.markdown(
@@ -1434,13 +2067,15 @@ if st.session_state.page == "Home":
         if x["Type"] == "Withdrawal"
     )
 
-    net_flow = deposits - withdrawals
+    net_flow = (
+        deposits - withdrawals
+    )
 
     overview = st.columns(4)
 
     with overview[0]:
 
-        st.markdown(
+        render_html(
             f"""
             <div class="metric-card">
 
@@ -1457,13 +2092,12 @@ if st.session_state.page == "Home":
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     with overview[1]:
 
-        st.markdown(
+        render_html(
             f"""
             <div class="metric-card">
 
@@ -1480,13 +2114,12 @@ if st.session_state.page == "Home":
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     with overview[2]:
 
-        st.markdown(
+        render_html(
             f"""
             <div class="metric-card">
 
@@ -1503,8 +2136,7 @@ if st.session_state.page == "Home":
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     with overview[3]:
@@ -1521,7 +2153,7 @@ if st.session_state.page == "Home":
             else "↓"
         )
 
-        st.markdown(
+        render_html(
             f"""
             <div class="metric-card">
 
@@ -1538,8 +2170,7 @@ if st.session_state.page == "Home":
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     st.markdown(
@@ -1581,6 +2212,7 @@ if st.session_state.page == "Home":
         ):
 
             st.session_state.page = "History"
+
             st.rerun()
 
     with q4:
@@ -1591,6 +2223,7 @@ if st.session_state.page == "Home":
         ):
 
             st.session_state.page = "AI"
+
             st.rerun()
 
     st.markdown(
@@ -1599,14 +2232,16 @@ if st.session_state.page == "Home":
     )
 
     recent = list(
-        reversed(history[-5:])
+        reversed(
+            history[-5:]
+        )
     )
 
     if not recent:
 
         st.info(
-            "Your recent activity will appear here "
-            "after your first transaction."
+            "Your recent activity will appear "
+            "here after your first transaction."
         )
 
     else:
@@ -1618,7 +2253,12 @@ if st.session_state.page == "Home":
                 "Deposit",
             }
 
-            prefix = "+" if incoming else "-"
+            prefix = (
+                "+"
+                if incoming
+                else "-"
+            )
+
             cls = (
                 "money-in"
                 if incoming
@@ -1631,7 +2271,7 @@ if st.session_state.page == "Home":
                 else "↘"
             )
 
-            st.markdown(
+            render_html(
                 f"""
                 <div class="transaction-card">
 
@@ -1640,25 +2280,27 @@ if st.session_state.page == "Home":
                         <div>
 
                             <div class="transaction-name">
-                                {icon} {tx["Type"]}
+                                {icon}
+                                {safe(tx["Type"])}
                             </div>
 
                             <div class="transaction-meta">
-                                {tx["Date-Time"]}
-                                • ID {tx["Transaction ID"]}
+                                {safe(tx["Date-Time"])}
+                                • ID
+                                {safe(tx["Transaction ID"])}
                             </div>
 
                         </div>
 
                         <div class="transaction-money {cls}">
-                            {prefix} ₹{tx["Amount"]:,.2f}
+                            {prefix}
+                            ₹{tx["Amount"]:,.2f}
                         </div>
 
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True,
+                """
             )
 
 
@@ -1793,7 +2435,11 @@ elif st.session_state.page == "Money":
 
     with right:
 
-        st.markdown(
+        account_html = safe(
+            st.session_state.account_no
+        )
+
+        render_html(
             f"""
             <div class="balance-card">
 
@@ -1806,12 +2452,11 @@ elif st.session_state.page == "Money":
                 </div>
 
                 <span class="account-chip">
-                    A/C {st.session_state.account_no}
+                    A/C {account_html}
                 </span>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
         latest = st.session_state.get(
@@ -1820,7 +2465,7 @@ elif st.session_state.page == "Money":
 
         if latest:
 
-            st.markdown(
+            render_html(
                 f"""
                 <div class="ai-card"
                      style="margin-top:14px;">
@@ -1829,17 +2474,21 @@ elif st.session_state.page == "Money":
                         ✅ TRANSACTION COMPLETE
                     </div>
 
-                    <h4 style="margin:10px 0 3px;">
-                        {latest["type"]}
-                        • ₹{latest["amount"]:,.2f}
+                    <h4 style="
+                        margin:10px 0 3px;
+                    ">
+                        {safe(latest["type"])}
+                        •
+                        ₹{latest["amount"]:,.2f}
                     </h4>
 
                     <div style="
                         color:#91a6c1;
                         font-size:.72rem;
                     ">
-                        {latest["time"]}
-                        • ID {latest["txid"]}
+                        {safe(latest["time"])}
+                        • ID
+                        {safe(latest["txid"])}
                     </div>
 
                     <div style="
@@ -1852,8 +2501,7 @@ elif st.session_state.page == "Money":
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True,
+                """
             )
 
 
@@ -1964,7 +2612,7 @@ elif st.session_state.page == "History":
                 else "money-out"
             )
 
-            st.markdown(
+            render_html(
                 f"""
                 <div class="transaction-card">
 
@@ -1973,12 +2621,13 @@ elif st.session_state.page == "History":
                         <div>
 
                             <div class="transaction-name">
-                                {tx["Type"]}
+                                {safe(tx["Type"])}
                             </div>
 
                             <div class="transaction-meta">
-                                {tx["Date-Time"]}
-                                • {tx["Transaction ID"]}
+                                {safe(tx["Date-Time"])}
+                                •
+                                {safe(tx["Transaction ID"])}
                             </div>
 
                             <div class="transaction-meta">
@@ -1996,8 +2645,7 @@ elif st.session_state.page == "History":
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True,
+                """
             )
 
         export_lines = [
@@ -2022,7 +2670,9 @@ elif st.session_state.page == "History":
 
         st.download_button(
             "📥 Download Statement",
-            data="\n".join(export_lines),
+            data="\n".join(
+                export_lines
+            ),
             file_name=(
                 f"PY_BANK_"
                 f"{st.session_state.account_no}"
@@ -2060,41 +2710,34 @@ elif st.session_state.page == "Insights":
         if x["Type"] == "Withdrawal"
     ]
 
-    totals = [
-        sum(deposits),
-        sum(withdrawals),
-        len(deposits),
-        len(withdrawals),
-    ]
-
     c1, c2, c3, c4 = st.columns(4)
 
     with c1:
 
         st.metric(
             "Total Deposits",
-            f"₹{totals[0]:,.2f}",
+            f"₹{sum(deposits):,.2f}",
         )
 
     with c2:
 
         st.metric(
             "Total Withdrawals",
-            f"₹{totals[1]:,.2f}",
+            f"₹{sum(withdrawals):,.2f}",
         )
 
     with c3:
 
         st.metric(
             "Deposit Count",
-            totals[2],
+            len(deposits),
         )
 
     with c4:
 
         st.metric(
             "Withdrawal Count",
-            totals[3],
+            len(withdrawals),
         )
 
     if history:
@@ -2117,7 +2760,9 @@ elif st.session_state.page == "Insights":
                 try:
 
                     dt = datetime.strptime(
-                        str(item["Date-Time"]),
+                        str(
+                            item["Date-Time"]
+                        ),
                         "%d-%m-%Y %H:%M:%S",
                     )
 
@@ -2146,12 +2791,15 @@ elif st.session_state.page == "Insights":
 
             st.bar_chart(
                 {
-                    "Money In": sum(deposits),
-                    "Money Out": sum(withdrawals),
+                    "Money In":
+                        sum(deposits),
+
+                    "Money Out":
+                        sum(withdrawals),
                 }
             )
 
-            st.markdown(
+            render_html(
                 f"""
                 <div class="glass">
 
@@ -2166,10 +2814,12 @@ elif st.session_state.page == "Insights":
 
                         <b>{len(deposits)}</b>
                         deposits
+
                         <br>
 
                         <b>{len(withdrawals)}</b>
                         withdrawals
+
                         <br>
 
                         <b>{len(history)}</b>
@@ -2178,19 +2828,19 @@ elif st.session_state.page == "Insights":
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True,
+                """
             )
 
     else:
 
         st.info(
-            "Create or use an account to unlock insights."
+            "Create or use an account "
+            "to unlock insights."
         )
 
 
 # ============================================================
-# GEMINI AI
+# AI
 # ============================================================
 
 elif st.session_state.page == "AI":
@@ -2209,7 +2859,7 @@ elif st.session_state.page == "AI":
 
         st.stop()
 
-    st.markdown(
+    render_html(
         """
         <div class="ai-card">
 
@@ -2217,7 +2867,9 @@ elif st.session_state.page == "AI":
                 ✦ POWERED BY GOOGLE GEMINI
             </div>
 
-            <h2 style="margin:10px 0 6px;">
+            <h2 style="
+                margin:10px 0 6px;
+            ">
                 Meet your banking assistant.
             </h2>
 
@@ -2226,14 +2878,13 @@ elif st.session_state.page == "AI":
                 line-height:1.65;
                 font-size:.87rem;
             ">
-                Ask questions about your transaction history or generate a
-                visual, easy-to-read activity report from the data stored in
-                your PY BANK account.
+                Ask questions about your transaction history
+                or generate a visual, easy-to-read activity
+                report from your PY BANK account.
             </div>
 
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.markdown(
@@ -2271,7 +2922,9 @@ elif st.session_state.page == "AI":
 
             try:
 
-                report = generate_ai_report()
+                report = (
+                    generate_ai_report()
+                )
 
                 st.session_state.ai_report = report
 
@@ -2352,13 +3005,13 @@ elif st.session_state.page == "AI":
 
                 try:
 
-                    answer = generate_ai_answer(
-                        question.strip()
+                    answer = (
+                        generate_ai_answer(
+                            question.strip()
+                        )
                     )
 
-                    st.session_state.chat_answer = (
-                        answer
-                    )
+                    st.session_state.chat_answer = answer
 
                     status.update(
                         label="✅ Answer ready!",
@@ -2380,8 +3033,8 @@ elif st.session_state.page == "AI":
 
     if st.session_state.chat_answer:
 
-        st.markdown(
-            f"""
+        render_html(
+            """
             <div class="glass">
 
                 <div class="ai-badge">
@@ -2389,8 +3042,7 @@ elif st.session_state.page == "AI":
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
         st.markdown(
@@ -2431,7 +3083,21 @@ elif st.session_state.page == "Profile":
 
     with left:
 
-        st.markdown(
+        profile_initials = safe(
+            initials(
+                st.session_state.name
+            )
+        )
+
+        profile_name = safe(
+            st.session_state.name
+        )
+
+        profile_account = safe(
+            st.session_state.account_no
+        )
+
+        render_html(
             f"""
             <div class="balance-card"
                  style="text-align:center;">
@@ -2454,14 +3120,14 @@ elif st.session_state.page == "Profile":
                     border:
                         1px solid rgba(255,255,255,.11);
                 ">
-                    {initials(st.session_state.name)}
+                    {profile_initials}
                 </div>
 
                 <div style="
                     font-size:1.35rem;
                     font-weight:800;
                 ">
-                    {st.session_state.name}
+                    {profile_name}
                 </div>
 
                 <div style="
@@ -2473,19 +3139,26 @@ elif st.session_state.page == "Profile":
                 </div>
 
                 <div style="margin-top:14px;">
+
                     <span class="account-chip">
-                        A/C {st.session_state.account_no}
+                        A/C {profile_account}
                     </span>
+
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     with right:
 
-        st.markdown(
+        customer = (
+            account["name"]
+            if account
+            else st.session_state.name
+        )
+
+        render_html(
             f"""
             <div class="glass">
 
@@ -2500,38 +3173,40 @@ elif st.session_state.page == "Profile":
                 ">
 
                     <b>Customer:</b>
-                    {
-                        account["name"]
-                        if account
-                        else st.session_state.name
-                    }
+                    {safe(customer)}
+
                     <br>
 
                     <b>Account Number:</b>
-                    {st.session_state.account_no}
+                    {safe(st.session_state.account_no)}
+
                     <br>
 
                     <b>Current Balance:</b>
                     ₹{balance:,.2f}
+
                     <br>
 
                     <b>Total Transactions:</b>
                     {len(history)}
+
                     <br>
 
                     <b>Status:</b>
-                    <span style="color:#56edb1;">
+
+                    <span style="
+                        color:#56edb1;
+                    ">
                         ● Active
                     </span>
 
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
-        st.markdown(
+        render_html(
             """
             <div class="glass"
                  style="margin-top:14px;">
@@ -2546,15 +3221,14 @@ elif st.session_state.page == "Profile":
                     font-size:.8rem;
                     line-height:1.65;
                 ">
-                    This app preserves your project’s Excel/PIN design for
-                    learning and demonstration. For production use, credentials
-                    should be hashed and sensitive banking data should live in
-                    a transactional database.
+                    This app preserves the Excel/PIN design
+                    for learning and demonstration. For production
+                    use, credentials should be hashed and sensitive
+                    banking data should live in a transactional database.
                 </div>
 
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
 
@@ -2562,10 +3236,11 @@ elif st.session_state.page == "Profile":
 # FOOTER
 # ============================================================
 
-st.markdown(
-    '<div class="footer">'
-    '🏦 PY BANK • AI Banking Prototype • '
-    'Powered by Streamlit + Google Gemini'
-    '</div>',
-    unsafe_allow_html=True,
+render_html(
+    """
+    <div class="footer">
+        🏦 PY BANK • AI Banking Prototype •
+        Powered by Streamlit + Google Gemini
+    </div>
+    """
 )
